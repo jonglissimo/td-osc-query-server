@@ -25,36 +25,26 @@ class Oscquery:
 
 		return oscAddresses
 
+
 	def ReceiveOsc (self, address, args):
 		stored = self.ownerComp.fetch(address)
 		compPath = stored["comp"]
 		container = self.ownerComp.op(compPath)
 		parName = stored["par"]
-		parType = stored["type"]
 		parStyle = stored["style"]
+		parFirstTupletName = stored["firstTupletName"]
+		parameter = getattr(container.par, parFirstTupletName)
 
-		if (parStyle == "XY"):
-			setattr(container.par, parName + "x", args[0])
-			setattr(container.par, parName + "y", args[1])
+		if (not self.writeIsAllowed(parameter)):
+			print ("OSCQuery: Setting parameter " + parName + " with an active expression, export or binding is prevented.")
+			return
 
-		elif (parStyle == "XYZ"):
-			setattr(container.par, parName + "x", args[0])
-			setattr(container.par, parName + "y", args[1])
-			setattr(container.par, parName + "z", args[2])
+		if (parStyle in ["XY", "XYZ", "UV", "UVW", "WH"]):
+			parameter = getattr(container.par, parFirstTupletName)
 
-		elif (parStyle == "UV"):
-			setattr(container.par, parName + "u", args[0])
-			setattr(container.par, parName + "v", args[1])
+			for i, p in enumerate(parameter.tuplet):
+				setattr(container.par, p.name, args[i])
 
-		elif (parStyle == "UVW"):
-			setattr(container.par, parName + "u", args[0])
-			setattr(container.par, parName + "v", args[1])
-			setattr(container.par, parName + "w", args[2])
-
-		elif (parStyle == "WH"):
-			setattr(container.par, parName + "w", args[0])
-			setattr(container.par, parName + "h", args[1])
-		
 		elif (parStyle == "RGB" or
 			parStyle == "RGBA"):
 			value = args[0]
@@ -98,13 +88,8 @@ class Oscquery:
 
 			setattr(container.par, parName, key)
 
-
 		else:
 			setattr(container.par, parName, args[0])
-
-		# elif (len(parType) == 2):
-		# 	setattr(container.par, parName + "x", args[0])
-		# 	# setattr(container.par, parName + "y", args[1])
 
 
 	def GetJson(self, uri="/"):
@@ -120,6 +105,7 @@ class Oscquery:
 			segment = self.getSegment(result, uriSegments)
 			jsonText = TDJ.jsonToText(segment)
 			return jsonText
+
 
 	def getSegment(self, segment, uriSegments):
 		if (len(uriSegments) <= 0):
@@ -147,52 +133,57 @@ class Oscquery:
 				includePagesInPath = getattr(self.ownerComp.par, "Includepagesinoscpath" + str(i))
 				# print(compPath, oscPrefix, includePagesInPath)
 
-				pars = TDJ.opToJSONOp(container, ["val"])
 				pages = container.customPages
 				compResult = {}
 				contents = {}
 
-				for pageObject in pages:
-					pageName = pageObject.name
-					page = pars[pageName]
-					
-					for i, (key, parameter) in enumerate(page.items()):
-						# print(key, parameter)
-						if (includePagesInPath):
-							oscAddress = "/" + oscPrefix + "/" + pageName + "/" + key
-						else:
-							oscAddress = "/" + oscPrefix + "/" + key
-
-						par = {}
-						par["TYPE"] = self.getType(parameter)
-						par["DESCRIPTION"] = key
-						par["FULL_PATH"] = oscAddress
-
-						if (par["TYPE"] != "N"):
-							par["VALUE"] = self.getValue(parameter)
-
-						if (par["TYPE"] != "s" and
-							par["TYPE"] != "r" and
-							par["TYPE"] != "N" or
-							parameter["style"] == "Menu"):
-							par["RANGE"] = self.getRange(parameter)
-
-						contents[key] = par
-
-						storageItem = { 
-							"type": par["TYPE"],
-							"comp": compPath,
-							"par": key,
-							"style": parameter["style"]
-						}
-
-						self.ownerComp.store(oscAddress, storageItem)
-						print(oscAddress)
+				for page in pages:
+					if (page.isCustom):
+						parameters = page.pars
+						pageName = page.name
 						
-					if (includePagesInPath):
-						compResult[pageName] = {}
-						compResult[pageName]["CONTENTS"] = contents
-						contents = {}
+						for parameter in parameters:
+							isSingleParameter = (parameter.name == parameter.tupletName)
+
+							if (isSingleParameter or (not isSingleParameter and parameter.vecIndex == 0) ):
+								parameterName = parameter.tupletName
+								
+								if (includePagesInPath):
+									oscAddress = "/" + oscPrefix + "/" + pageName + "/" + parameterName
+								else:
+									oscAddress = "/" + oscPrefix + "/" + parameterName
+
+								par = {}
+								par["TYPE"] = self.getType(parameter)
+								par["DESCRIPTION"] = parameterName
+								par["FULL_PATH"] = oscAddress
+
+								if (par["TYPE"] != "N"):	# all except pulse parameter
+									par["VALUE"] = self.getValue(parameter)
+
+								if (par["TYPE"] not in ["s", "r", "N"] or
+									parameter.style == "Menu"):
+									par["RANGE"] = self.getRange(parameter)
+
+								par["ACCESS"] = self.getAccess(parameter)
+
+								contents[parameterName] = par
+
+								storageItem = { 
+									"type": par["TYPE"],
+									"comp": compPath,
+									"par": parameterName,
+									"style": parameter.style,
+									"firstTupletName": parameter.name
+								}
+
+								self.ownerComp.store(oscAddress, storageItem)
+								print(oscAddress)
+							
+						if (includePagesInPath):
+							compResult[pageName] = {}
+							compResult[pageName]["CONTENTS"] = contents
+							contents = {}
 				
 
 				if (includePagesInPath):
@@ -204,132 +195,94 @@ class Oscquery:
 
 		return result
 
+
 	def getValue(self, parameter):
-		valIsList = isinstance(parameter["val"], list)
 
-		if (parameter["style"] == "XY" or
-			parameter["style"] == "UV" or
-			parameter["style"] == "WH"):
-			if (valIsList):
-				return [parameter["val"][0], parameter["val"][1]]
-			else:
-				return [parameter["val"], parameter["val"]]
+		if (parameter.style in ["XY", "UV", "WH"]):
+			return [parameter.tuplet[0].eval(), parameter.tuplet[1].eval()]
 
-		if (parameter["style"] == "XYZ" or 
-			parameter["style"] == "UVW"):
-			if (valIsList):
-				return [parameter["val"][0], parameter["val"][1], parameter["val"][2]]
-			else:
-				return [parameter["val"], parameter["val"], parameter["val"]]
+		if (parameter.style in ["XYZ", "UVW"]):
+			return [parameter.tuplet[0].eval(), parameter.tuplet[1].eval(), parameter.tuplet[2].eval()]
 
-		if (parameter["style"] == "RGB" or
-			parameter["style"] == "RGBA"):
-			if (valIsList):
-				r = self.getHex(parameter["val"][0])
-				g = self.getHex(parameter["val"][1])
-				b = self.getHex(parameter["val"][2])
-				a = "ff" if parameter["style"] == "RGB" else self.getHex(parameter["val"][3])
-				return ["#" + r + g + b + a]
-			else:
-				r = self.getHex(parameter["val"])
-				g = self.getHex(parameter["val"])
-				b = self.getHex(parameter["val"])
-				a = "ff" if parameter["style"] == "RGB" else self.getHex(parameter["val"])
-				return ["#" + r + g + b + a]
+		if (parameter.style in ["RGB", "RGBA"]):
+			r = self.getHex(parameter.tuplet[0].eval())
+			g = self.getHex(parameter.tuplet[1].eval())
+			b = self.getHex(parameter.tuplet[2].eval())
+			a = "ff" if parameter.style == "RGB" else self.getHex(parameter.tuplet[3].eval())
+			return ["#" + r + g + b + a]
 
-		if (parameter["style"] == "Menu"):
-			curValue = parameter["val"]
-			menuLabels = parameter["menuLabels"]
-			menuNames = parameter["menuNames"]
+		if (parameter.style == "Menu"):
+			curValue = parameter.val
+			menuLabels = parameter.menuLabels
+			menuNames = parameter.menuNames
 			
 			index = menuNames.index(curValue)
 			key = menuLabels[index]
 			
 			return [key]
 
-		return [parameter["val"]]
+		if (parameter.style in ["CHOP", "COMP", "DAT", "SOP", "MAT", "TOP"]):
+			return [parameter.val]
+		else:
+			return [parameter.eval()]
+
 
 	def getHex(self, f):
 		v = hex(int(f * 255))[2:]
 		v = v if len(v) == 2 else "0" + str(v)
 		return v
 
+
 	def getRange(self, parameter):
-		if (parameter["style"] == "Toggle"):
+
+		if (parameter.style == "Toggle"):
 			return [{ "MAX": 1, "MIN": 0 }]
 
-		if (parameter["style"] == "XY" or
-			parameter["style"] == "UV" or
-			parameter["style"] == "WH"):
-			maxIsList = isinstance(parameter["normMax"], list)
-			minIsList = isinstance(parameter["normMin"], list)
+		if (parameter.style in ["XY", "UV", "WH", "XYZ", "UVW"]):
+			result = []
 
-			max1 = parameter["normMax"][0] if maxIsList else parameter["normMax"]
-			min1 = parameter["normMin"][0] if minIsList else parameter["normMin"]
-			max2 = parameter["normMax"][1] if maxIsList else parameter["normMax"]
-			min2 = parameter["normMin"][1] if minIsList else parameter["normMin"]
+			for charIndex in range(len(parameter.style)):
+				newRange = { "MAX": parameter.tuplet[charIndex].normMax, "MIN": parameter.tuplet[charIndex].normMin }
+				result.append(newRange)
 
-			return [{ "MAX": max1, "MIN": min1 }, { "MAX": max2, "MIN": min2 }]
+			return result
 
-		if (parameter["style"] == "XYZ" or
-			parameter["style"] == "UVW"):
-			maxIsList = isinstance(parameter["normMax"], list)
-			minIsList = isinstance(parameter["normMin"], list)
+		if (parameter.style == "Menu"):
+			return [{ "VALS": parameter.menuLabels }]
 
-			max1 = parameter["normMax"][0] if maxIsList else parameter["normMax"]
-			min1 = parameter["normMin"][0] if minIsList else parameter["normMin"]
-			max2 = parameter["normMax"][1] if maxIsList else parameter["normMax"]
-			min2 = parameter["normMin"][1] if minIsList else parameter["normMin"]
-			max3 = parameter["normMax"][2] if maxIsList else parameter["normMax"]
-			min3 = parameter["normMin"][2] if minIsList else parameter["normMin"]
+		return [{ "MAX": parameter.normMax, "MIN": parameter.normMin }]
 
-			return [{ "MAX": max1, "MIN": min1 }, { "MAX": max2, "MIN": min2 }, { "MAX": max3, "MIN": min3 }]
-
-		if (parameter["style"] == "Menu"):
-			return [{ "VALS": parameter["menuLabels"]}]
-
-		if ("normMax" in parameter and "normMin" in parameter):
-			return [{ "MAX": parameter["normMax"], "MIN": parameter["normMin"] }]
-			
 
 	def getType (self, parameter):
-		t = parameter["style"]
+		t = parameter.style
 
 		if (t == "Float"):
 			return "f"
 		elif (t == "Int"):
 			return "i"
-		elif (t == "Str" or 
-			t == "File" or 
-			t == "Folder" or
-			t == "CHOP" or
-			t == "COMP" or
-			t == "DAT" or
-			t == "SOP" or
-			t == "MAT" or
-			t == "TOP" or
-			t == "Menu" or
-			t == "StrMenu"):
+		elif (t in ["Str", "File", "Folder", "CHOP", "COMP", "DAT", "SOP", "MAT", "TOP", "Menu", "StrMenu"]):
 			return "s"
 		elif (t == "Toggle"):
 			return "T"
-		elif (t == "RGB" or
-			t == "RGBA"):
+		elif (t in ["RGB", "RGBA"]):
 			return "r"
-		elif (t == "XY" or
-			t == "UV" or
-			t == "WH"):
+		elif (t in ["XY", "UV", "WH"]):
 			return "ff"
-		elif (t == "XYZ" or
-			t == "UVW"):
+		elif (t in ["XYZ", "UVW"]):
 			return "fff"
 		elif (t == "Pulse"):
 			return "N"
-		
 
 		return "f"
 
+
+	def getAccess (self, parameter):
+		if (parameter.mode == ParMode.CONSTANT):
+			return 3	# read and write access
+		else:
+			return 1	# read-only access
 	
+
 	def getPrefix(self, container, i):
 		if not container:
 			return ""
@@ -340,3 +293,11 @@ class Oscquery:
 				return str(container.name)
 		else:
 			return customPrefix
+
+
+	def writeIsAllowed(self, parameter):
+		for p in parameter.tuplet:
+			if (p.mode != ParMode.CONSTANT):
+				return False
+
+		return True

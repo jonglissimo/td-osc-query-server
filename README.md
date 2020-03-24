@@ -43,3 +43,14 @@ It uses the Webserver DAT that was introduced in this TD version.
 ## Found a bug or want a feature?
 
 Please file a issue or add a pull request.
+
+
+## Changelog
+
+## 1.1.0
+
+* Now includes ACCESS attribute in OSCQuery Json => read-only for parameters that have a expression or export mode.
+* Code refactor
+
+### 1.0.0
+First version
