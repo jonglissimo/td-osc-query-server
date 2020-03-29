@@ -1,7 +1,6 @@
 import json
 import struct
 from TDStoreTools import StorageManager
-TDF = op.TDModules.mod.TDFunctions
 TDJ = op.TDModules.mod.TDJSON
 
 
@@ -92,14 +91,14 @@ class Oscquery:
 			setattr(container.par, parName, args[0])
 
 
-	def GetJson(self, uri="/"):
+	def GetJson(self, uri="/", pars={}):
 		if (uri == "/"):
-			result = self.getFullJson()
+			result = self.getFullJson(pars)
 			jsonText = TDJ.jsonToText(result)
 			return jsonText
 		
 		else:
-			result = self.getFullJson()
+			result = self.getFullJson(pars)
 			uriSegments = uri.split("/")
 			uriSegments.pop(0)
 			segment = self.getSegment(result, uriSegments)
@@ -116,12 +115,17 @@ class Oscquery:
 			return self.getSegment(segment, uriSegments)
 
 
-	def getFullJson(self):
+	def getFullJson(self, pars={}):
+		hostinfoRequested = "HOST_INFO" in pars
+
+		if hostinfoRequested:
+			return self.getHostinfoJson()
+		
 		self.clearStorage() # clear storage, to rebuild on each request
 		
 		result = {
-			"DESCRIPTION": "TD root node", 
-			"CONTENTS": { } 
+			"DESCRIPTION": str(self.ownerComp.par.Name), 
+			"CONTENTS": { }
 		}
 
 		for i in range(1,11):
@@ -301,3 +305,28 @@ class Oscquery:
 				return False
 
 		return True
+
+	def getHostinfoJson(self):
+		hostinfo = {
+				"NAME": str(self.ownerComp.par.Name),
+				"OSC_PORT": int(self.ownerComp.par.Port),
+				"OSC_TRANSPORT": "UDP",
+				"EXTENSIONS": {
+					"PATH_REMOVED": False,
+					"CRITICAL": False,
+					"VALUE": True,
+					"PATH_CHANGED": False,
+					"PATH_RENAMED": False,
+					"CLIPMODE": False,
+					"LISTEN": False,
+					"RANGE": True,
+					"HTML": False,
+					"PATH_ADDED": False,
+					"UNIT": False,
+					"ACCESS": True,
+					"IGNORE": False,
+					"TAGS": False
+				}
+		}
+
+		return hostinfo
