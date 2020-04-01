@@ -35,7 +35,7 @@ class Oscquery:
 		parameter = getattr(container.par, parFirstTupletName)
 
 		if (not self.writeIsAllowed(parameter)):
-			print ("OSCQuery: Setting parameter " + parName + " with an active expression, export or binding is prevented.")
+			print ("OSCQuery: Setting parameter " + parName + " which is read only or has an active expression or export is prevented.")
 			return
 
 		if (parStyle in ["XY", "XYZ", "UV", "UVW", "WH"]):
@@ -281,7 +281,7 @@ class Oscquery:
 
 
 	def getAccess (self, parameter):
-		if (parameter.mode == ParMode.CONSTANT):
+		if (parameter.mode == ParMode.CONSTANT and parameter.readOnly != 1):
 			return 3	# read and write access
 		else:
 			return 1	# read-only access
@@ -301,7 +301,7 @@ class Oscquery:
 
 	def writeIsAllowed(self, parameter):
 		for p in parameter.tuplet:
-			if (p.mode != ParMode.CONSTANT):
+			if (p.mode != ParMode.CONSTANT or p.readOnly == 1):
 				return False
 
 		return True
