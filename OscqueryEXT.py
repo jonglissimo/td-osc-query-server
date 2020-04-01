@@ -27,32 +27,24 @@ class Oscquery:
 
 	def ReceiveOsc (self, address, args):
 		stored = self.ownerComp.fetch(address)
-		compPath = stored["comp"]
-		container = self.ownerComp.op(compPath)
-		parName = stored["par"]
-		parStyle = stored["style"]
-		parFirstTupletName = stored["firstTupletName"]
-		parameter = getattr(container.par, parFirstTupletName)
+		parameter = stored["par"]
+		parStyle = parameter.style
 
-		if (not self.writeIsAllowed(parameter)):
+		if not self.writeIsAllowed(parameter):
+			parName = parameter.name
 			print ("OSCQuery: Setting parameter " + parName + " which is read only or has an active expression or export is prevented.")
 			return
 
-		if (parStyle in ["XY", "XYZ", "UV", "UVW", "WH"]):
-			parameter = getattr(container.par, parFirstTupletName)
-
+		if parStyle in ["XY", "XYZ", "UV", "UVW", "WH"]:
 			for i, p in enumerate(parameter.tuplet):
-				setattr(container.par, p.name, args[i])
+				p.val = args[i]
 
-		elif (parStyle == "RGB" or
-			parStyle == "RGBA"):
+		elif parStyle in ["RGB", "RGBA"]:
 			value = args[0]
+			color = []
 
-			if (isinstance(value, float)):
-				r = args[0]
-				g = args[1]
-				b = args[2]
-				a = args[3]
+			if isinstance(value, float):
+				color = args
 
 			else:
 				try:
@@ -61,34 +53,27 @@ class Oscquery:
 					pass
 
 				if isinstance(value, tuple):
-					r = value[0] / 255
-					g = value[1] / 255
-					b = value[2] / 255
-					a = value[3] / 255
+					color.append(value[0] / 255)
+					color.append(value[1] / 255)
+					color.append(value[2] / 255)
+					color.append(value[3] / 255)
 
-			setattr(container.par, parName + "r", r)
-			setattr(container.par, parName + "g", g)
-			setattr(container.par, parName + "b", b)
+			for i, p in enumerate(parameter.tuplet):
+				p.val = color[i]
 			
-			if (parStyle == "RGBA"):
-				setattr(container.par, parName + "a", a)
+		elif parStyle == "Pulse":
+			parameter.pulse()
 
-		elif (parStyle == "Pulse"):
-			pulseParameter = getattr(container.par, parName)
-			pulseParameter.pulse()
-
-		elif (parStyle == "Menu"):
+		elif parStyle == "Menu":
 			value = args[0]
-			menuParameter = getattr(container.par, parName)
-			labels = menuParameter.menuLabels
-			values = menuParameter.menuNames
+			labels = parameter.menuLabels
+			values = parameter.menuNames
 			index = labels.index(value)
 			key = values[index]
-
-			setattr(container.par, parName, key)
+			parameter.val = key
 
 		else:
-			setattr(container.par, parName, args[0])
+			parameter.val = args[0]
 
 
 	def GetJson(self, uri="/", pars={}):
@@ -174,11 +159,8 @@ class Oscquery:
 								contents[parameterName] = par
 
 								storageItem = { 
-									"type": par["TYPE"],
-									"comp": compPath,
-									"par": parameterName,
-									"style": parameter.style,
-									"firstTupletName": parameter.name
+									"par": parameter,
+									"type": par["TYPE"]
 								}
 
 								self.ownerComp.store(oscAddress, storageItem)
@@ -307,7 +289,7 @@ class Oscquery:
 		return True
 
 	def getHostinfoJson(self):
-		hostinfo = {
+		return {
 				"NAME": str(self.ownerComp.par.Name),
 				"OSC_PORT": int(self.ownerComp.par.Port),
 				"OSC_TRANSPORT": "UDP",
@@ -328,5 +310,3 @@ class Oscquery:
 					"TAGS": False
 				}
 		}
-
-		return hostinfo
