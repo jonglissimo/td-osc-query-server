@@ -13,7 +13,7 @@
 # 		'data' - The data to send back to the client. If displaying a web-page, any HTML would be put here.
 
 # return the response dictionary
-import osc_parse_module as osc_parse
+import osc_parse_module as osclib
 
 def onHTTPRequest(webServerDAT, request, response):
 	uri = request["uri"]
@@ -37,13 +37,13 @@ def onHTTPRequest(webServerDAT, request, response):
 		pass
 
 	else:
-		try:
-			response = addToResponse(response, 200, "application/json")
-			response["Access-Control-Allow-Origin"] = "*"
-			response["data"] = parent().GetJson(uri, request["pars"])
-		except:
-			response = addToResponse(response, 404, "text/html")
-			response["data"] = buildNotFoundData()
+		# try:
+		response = addToResponse(response, 200, "application/json")
+		response["Access-Control-Allow-Origin"] = "*"
+		response["data"] = parent().GetJson(uri, request["pars"])
+		# except:
+		# 	response = addToResponse(response, 404, "text/html")
+		# 	response["data"] = buildNotFoundData()
 
 	return response
 
@@ -57,16 +57,13 @@ def onWebSocketClose(webServerDAT, client):
 
 
 def onWebSocketReceiveText(webServerDAT, client, data):
-	print("WS Receive Text: ")
-	print(client)
 	print(data)
 	#webServerDAT.webSocketSendText(client, data)
-
 	return
 
 
 def onWebSocketReceiveBinary(webServerDAT, client, data):
-	msg = osc_parse.decode_packet(data)
+	msg = osclib.decode_packet(data)
 	oscAddress = msg.addrpattern
 	oscArgs = []
 
@@ -79,8 +76,6 @@ def onWebSocketReceiveBinary(webServerDAT, client, data):
 		oscArgs.append(arg)
 		
 	parent().ReceiveOsc(oscAddress, oscArgs)
-
-	# webServerDAT.webSocketSendBinary(client, data)
 	return
 
 

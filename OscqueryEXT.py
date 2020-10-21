@@ -1,7 +1,10 @@
 import json
 import struct
 from TDStoreTools import StorageManager
+import osc_parse_module as osclib
 TDJ = op.TDModules.mod.TDJSON
+
+monitor_changes = op("monitor_changes")
 
 
 class Oscquery:
@@ -107,6 +110,9 @@ class Oscquery:
 			return self.getHostinfoJson()
 		
 		self.clearStorage() # clear storage, to rebuild on each request
+		self.destroyBidirectional()
+
+		bidirectionalActivated = parent().par.Bidirectionalcommunication
 		
 		result = {
 			"DESCRIPTION": str(self.ownerComp.par.Name), 
@@ -115,6 +121,7 @@ class Oscquery:
 
 		for i in range(1,11):
 			compPath = getattr(self.ownerComp.par, "Comp" + str(i))
+			
 			container = self.ownerComp.op(compPath)
 
 			if container:
@@ -132,39 +139,10 @@ class Oscquery:
 						pageName = page.name
 						
 						for parameter in parameters:
-							isSingleParameter = (parameter.name == parameter.tupletName)
-
-							if (isSingleParameter or (not isSingleParameter and parameter.vecIndex == 0) ):
-								parameterName = parameter.tupletName
-								
-								if (includePagesInPath):
-									oscAddress = "/" + oscPrefix + "/" + pageName + "/" + parameterName
-								else:
-									oscAddress = "/" + oscPrefix + "/" + parameterName
-
-								par = {}
-								par["TYPE"] = self.getType(parameter)
-								par["DESCRIPTION"] = parameterName
-								par["FULL_PATH"] = oscAddress
-
-								if (par["TYPE"] != "N"):	# all except pulse parameter
-									par["VALUE"] = self.getValue(parameter)
-
-								if (par["TYPE"] not in ["s", "r", "N"] or
-									parameter.style == "Menu"):
-									par["RANGE"] = self.getRange(parameter)
-
-								par["ACCESS"] = self.getAccess(parameter)
-
+							par = self.getParameterDefinition(parameter, oscPrefix, includePagesInPath, pageName)
+							if par:
+								parameterName = par["DESCRIPTION"]
 								contents[parameterName] = par
-
-								storageItem = { 
-									"par": parameter,
-									"type": par["TYPE"]
-								}
-
-								self.ownerComp.store(oscAddress, storageItem)
-								print(oscAddress)
 							
 						if (includePagesInPath):
 							compResult[pageName] = {}
@@ -179,7 +157,74 @@ class Oscquery:
 					result["CONTENTS"][oscPrefix] = {}
 					result["CONTENTS"][oscPrefix]["CONTENTS"] = contents
 
+				if bidirectionalActivated:
+					self.setupBidirectional(container)
+
 		return result
+
+	
+	def getParameterDefinition(self, parameter, oscPrefix, includePagesInPath, pageName):
+		isSingleParameter = (parameter.name == parameter.tupletName)
+
+		if (isSingleParameter or (not isSingleParameter and parameter.vecIndex == 0) ):
+			parameterName = parameter.tupletName
+			
+			if (includePagesInPath):
+				oscAddress = "/" + oscPrefix + "/" + pageName + "/" + parameterName
+			else:
+				oscAddress = "/" + oscPrefix + "/" + parameterName
+
+			par = {}
+			par["TYPE"] = self.getType(parameter)
+			par["DESCRIPTION"] = parameterName
+			par["FULL_PATH"] = oscAddress
+
+			if (par["TYPE"] != "N"):	# all except pulse parameter
+				par["VALUE"] = self.getValue(parameter)
+
+			if (par["TYPE"] not in ["s", "r", "N"] or
+				parameter.style == "Menu"):
+				par["RANGE"] = self.getRange(parameter)
+
+			par["ACCESS"] = self.getAccess(parameter)
+
+			storageItem = { 
+				"address": oscAddress,
+				"type": par["TYPE"],
+				"par": parameter
+			}
+
+			self.ownerComp.store(oscAddress, storageItem)
+			print(oscAddress)
+
+			container = parameter.owner
+
+			for t in parameter.tuplet:
+				key = container.name + "." + t.name
+				self.ownerComp.store(key, storageItem)
+
+			return par
+
+
+	def GetUpdateMsg(self, container, parameter):
+		key = container.name + "." + parameter.name
+		storedItem = parent().fetch(key)
+		par = storedItem["par"]
+
+		typeString = "," + storedItem["type"]
+		values = self.getValueForUpdate(par)
+
+		if par.style == "Toggle":
+			if values[0]:
+				typeString = ",T"
+			else:
+				typeString = ",F"
+
+		msg = osclib.OSCMessage(storedItem["address"], typeString, values)
+		raw = osclib.encode_packet(msg)
+
+		return raw
+
 
 
 	def getValue(self, parameter):
@@ -212,6 +257,41 @@ class Oscquery:
 		else:
 			return [parameter.eval()]
 
+
+
+	def getValueForUpdate(self, parameter):
+
+		if (parameter.style in ["XY", "UV", "WH"]):
+			return [parameter.tuplet[0].eval(), parameter.tuplet[1].eval()]
+
+		if (parameter.style in ["XYZ", "UVW"]):
+			return [parameter.tuplet[0].eval(), parameter.tuplet[1].eval(), parameter.tuplet[2].eval()]
+
+		if (parameter.style in ["RGB", "RGBA"]):
+			r = self.floatToInt(parameter.tuplet[0].eval())
+			g = self.floatToInt(parameter.tuplet[1].eval())
+			b = self.floatToInt(parameter.tuplet[2].eval())
+			a = 255 if parameter.style == "RGB" else self.floatToInt(parameter.tuplet[3].eval())
+
+			return [osclib.OSCrgba(r, g, b, a)]
+
+		if (parameter.style == "Menu"):
+			curValue = parameter.val
+			menuLabels = parameter.menuLabels
+			menuNames = parameter.menuNames
+			
+			index = menuNames.index(curValue)
+			key = menuLabels[index]
+			
+			return [key]
+
+		if (parameter.style in ["CHOP", "COMP", "DAT", "SOP", "MAT", "TOP"]):
+			return [parameter.val]
+		else:
+			return [parameter.eval()]
+
+	def floatToInt(self, f):
+		return int(f * 255) 
 
 	def getHex(self, f):
 		v = hex(int(f * 255))[2:]
@@ -249,7 +329,10 @@ class Oscquery:
 		elif (t in ["Str", "File", "Folder", "CHOP", "COMP", "DAT", "SOP", "MAT", "TOP", "Menu", "StrMenu"]):
 			return "s"
 		elif (t == "Toggle"):
-			return "T"
+			if parameter.eval():
+				return "T"
+			else:
+				return "F"
 		elif (t in ["RGB", "RGBA"]):
 			return "r"
 		elif (t in ["XY", "UV", "WH"]):
@@ -289,6 +372,8 @@ class Oscquery:
 		return True
 
 	def getHostinfoJson(self):
+		bidirectionalActivated = parent().par.Bidirectionalcommunication.eval()
+
 		return {
 				"NAME": str(self.ownerComp.par.Name),
 				"OSC_PORT": int(self.ownerComp.par.Port),
@@ -300,7 +385,7 @@ class Oscquery:
 					"PATH_CHANGED": False,
 					"PATH_RENAMED": False,
 					"CLIPMODE": False,
-					"LISTEN": False,
+					"LISTEN": bidirectionalActivated,
 					"RANGE": True,
 					"HTML": False,
 					"PATH_ADDED": False,
@@ -310,3 +395,24 @@ class Oscquery:
 					"TAGS": False
 				}
 		}
+
+	def ActivateBidirectional(self):
+		self.GetJson()
+	
+	def DeactivateBidirectional(self):
+		children = monitor_changes.findChildren(type=parameterexecuteDAT)
+
+		for c in children:
+			c.par.active = False
+	
+	def destroyBidirectional(self):
+		children = monitor_changes.findChildren(type=parameterexecuteDAT)
+
+		for c in children:
+			c.destroy()
+
+
+	def setupBidirectional(self, container):
+		createdOP = monitor_changes.copy(op("parexec_template"), name=container.name)
+		createdOP.par.op = container.path
+		createdOP.par.active = True
