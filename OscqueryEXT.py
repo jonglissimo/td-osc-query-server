@@ -42,6 +42,8 @@ class Oscquery:
 			for i, p in enumerate(parameter.tuplet):
 				p.val = args[i]
 
+			stored["lastReceivedValue"] = args
+
 		elif parStyle in ["RGB", "RGBA"]:
 			value = args[0]
 			color = []
@@ -64,6 +66,8 @@ class Oscquery:
 			for i, p in enumerate(parameter.tuplet):
 				p.val = color[i]
 			
+			stored["lastReceivedValue"] = color
+			
 		elif parStyle == "Pulse":
 			parameter.pulse()
 
@@ -74,9 +78,11 @@ class Oscquery:
 			index = labels.index(value)
 			key = values[index]
 			parameter.val = key
+			stored["lastReceivedValue"] = key
 
 		else:
 			parameter.val = args[0]
+			stored["lastReceivedValue"] = args[0]
 
 
 	def GetJson(self, uri="/", pars={}):
@@ -211,6 +217,9 @@ class Oscquery:
 		storedItem = parent().fetch(key)
 		par = storedItem["par"]
 
+		if self.checkLastReceivedValue(storedItem, par):
+			return False
+
 		typeString = "," + storedItem["type"]
 		values = self.getValueForUpdate(par)
 
@@ -224,6 +233,21 @@ class Oscquery:
 		raw = osclib.encode_packet(msg)
 
 		return raw
+
+
+	def checkLastReceivedValue(self, storedItem, parameter):
+		if "lastReceivedValue" in storedItem.keys(): 
+			parStyle = parameter.style
+
+			if parStyle in ["XY", "XYZ", "UV", "UVW", "WH", "RGB", "RGBA"]:
+				for i, p in enumerate(parameter.tuplet):
+					if p.eval() != storedItem["lastReceivedValue"][i]:
+						return False
+				return True
+			else:
+				return storedItem["lastReceivedValue"] == parameter.eval()
+		else: 
+			return False
 
 
 
