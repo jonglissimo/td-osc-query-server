@@ -47,10 +47,6 @@ The OSC Query specification defines that the OSC Query server should announce it
 The bonjour/zeroconf announcement is currently not implemented. It seems a bit tricky to implement a DNS client in Touchdesigner.
 Unfortunately, some OSC Query clients (e.g. Vezér) do not provide an option to input IP + port for OSC Query servers. 
 
-### Bi-directional communication
-
-The OSCQuery specification defines a optional bi-directional communication through websocket. This not yet implemented.
-
 
 ## What Touchdesigner version does it support?
 
@@ -64,6 +60,10 @@ Please file a issue or add a pull request.
 
 
 ## Changelog
+
+## 1.3.0
+
+* Adds bi-directional communication
 
 ## 1.2.0
 
