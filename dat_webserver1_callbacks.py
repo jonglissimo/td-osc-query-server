@@ -14,6 +14,8 @@
 
 # return the response dictionary
 import osc_parse_module as osclib
+import json
+
 
 def onHTTPRequest(webServerDAT, request, response):
 	uri = request["uri"]
@@ -57,8 +59,13 @@ def onWebSocketClose(webServerDAT, client):
 
 
 def onWebSocketReceiveText(webServerDAT, client, data):
-	print(data)
-	#webServerDAT.webSocketSendText(client, data)
+	obj = json.loads(data)
+
+	if obj["COMMAND"] == "LISTEN":
+		parent().AddToListen(obj["DATA"], client)
+	elif obj["COMMAND"] == "IGNORE":
+		parent().RemoveFromListen(obj["DATA"], client)
+
 	return
 
 

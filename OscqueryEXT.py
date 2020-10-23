@@ -216,6 +216,7 @@ class Oscquery:
 		key = container.name + "." + parameter.name
 		storedItem = parent().fetch(key)
 		par = storedItem["par"]
+		address = storedItem["address"]
 
 		if self.checkLastReceivedValue(storedItem, par):
 			return False
@@ -224,15 +225,20 @@ class Oscquery:
 		values = self.getValueForUpdate(par)
 
 		if par.style == "Toggle":
-			if values[0]:
-				typeString = ",T"
-			else:
-				typeString = ",F"
+			typeString = ",i"
 
-		msg = osclib.OSCMessage(storedItem["address"], typeString, values)
+			if par.eval():
+				values = [1]
+			else:
+				values = [0]
+
+		msg = osclib.OSCMessage(address, typeString, values)
 		raw = osclib.encode_packet(msg)
 
-		return raw
+		return {
+			"address": address,
+			"rawMsg": raw 
+		}
 
 
 	def checkLastReceivedValue(self, storedItem, parameter):
@@ -435,8 +441,34 @@ class Oscquery:
 		for c in children:
 			c.destroy()
 
-
 	def setupBidirectional(self, container):
 		createdOP = monitor_changes.copy(op("parexec_template"), name=container.name)
 		createdOP.par.op = container.path
 		createdOP.par.active = True
+
+
+	def ClearListenData(self):
+		monitor_changes.unstore("/*")
+
+	def AddToListen(self, address, client):
+		try: 
+			listeningClients = monitor_changes.fetch(address)
+
+			if client not in listeningClients:
+				listeningClients.append(client)
+				monitor_changes.store(address, listeningClients)
+
+		except Exception:
+			monitor_changes.store(address, [ client ])
+
+	def RemoveFromListen(self, address, client):
+		try:
+			listeningClients = monitor_changes.fetch(address)
+			listeningClients.remove(client)
+			monitor_changes.store(address, listeningClients)
+		except Exception:
+			pass
+	
+	def IsListeningToClient(self, address, client):
+		listeningClients = monitor_changes.fetch(address)
+		return client in listeningClients
