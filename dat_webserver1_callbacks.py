@@ -51,10 +51,12 @@ def onHTTPRequest(webServerDAT, request, response):
 
 
 def onWebSocketOpen(webServerDAT, client):
+	print("OSCQuery websocket opened for client: " + client)
 	return
 
 
 def onWebSocketClose(webServerDAT, client):
+	print("OSCQuery websocket closed for client: " + client)
 	return
 
 
@@ -95,10 +97,12 @@ def onWebSocketReceivePong(webServerDAT, client, data):
 
 
 def onServerStart(webServerDAT):
+	print("Started OSC Query Server")
 	return
 
 
 def onServerStop(webServerDAT):
+	print("Stopped OSC Query Server")
 	return
 
 
