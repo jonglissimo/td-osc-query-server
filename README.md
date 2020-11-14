@@ -61,6 +61,10 @@ Please file a issue or add a pull request.
 
 ## Changelog
 
+## 1.3.1
+
+* Adds Momentary and Float parameter with size greater than 1
+
 ## 1.3.0
 
 * Adds bi-directional communication
