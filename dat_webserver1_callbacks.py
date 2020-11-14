@@ -39,13 +39,13 @@ def onHTTPRequest(webServerDAT, request, response):
 		pass
 
 	else:
-		# try:
-		response = addToResponse(response, 200, "application/json")
-		response["Access-Control-Allow-Origin"] = "*"
-		response["data"] = parent().GetJson(uri, request["pars"])
-		# except:
-		# 	response = addToResponse(response, 404, "text/html")
-		# 	response["data"] = buildNotFoundData()
+		try:
+			response = addToResponse(response, 200, "application/json")
+			response["Access-Control-Allow-Origin"] = "*"
+			response["data"] = parent().GetJson(uri, request["pars"])
+		except:
+			response = addToResponse(response, 404, "text/html")
+			response["data"] = buildNotFoundData()
 
 	return response
 
@@ -61,7 +61,8 @@ def onWebSocketClose(webServerDAT, client):
 
 
 def onWebSocketReceiveText(webServerDAT, client, data):
-	obj = json.loads(data)
+	safeData = data.split("}")[0] + "}"  # hack needed because of integrated osc query webclient behaving weird
+	obj = json.loads(safeData) 
 
 	if obj["COMMAND"] == "LISTEN":
 		parent().AddToListen(obj["DATA"], client)
@@ -85,6 +86,7 @@ def onWebSocketReceiveBinary(webServerDAT, client, data):
 		oscArgs.append(arg)
 		
 	parent().ReceiveOsc(oscAddress, oscArgs)
+	
 	return
 
 

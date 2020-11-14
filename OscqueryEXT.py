@@ -4,6 +4,7 @@ from TDStoreTools import StorageManager
 import osc_parse_module as osclib
 TDJ = op.TDModules.mod.TDJSON
 
+webserver = op("webserver1")
 monitor_changes = op("monitor_changes")
 
 
@@ -38,7 +39,7 @@ class Oscquery:
 			print ("OSCQuery: Setting parameter " + parName + " which is read only or has an active expression or export is prevented.")
 			return
 
-		if parStyle in ["XY", "XYZ", "UV", "UVW", "WH"]:
+		if parStyle in ["Float", "XY", "XYZ", "UV", "UVW", "WH"]:
 			for i, p in enumerate(parameter.tuplet):
 				p.val = args[i]
 
@@ -70,6 +71,9 @@ class Oscquery:
 			
 		elif parStyle == "Pulse":
 			parameter.pulse()
+
+		elif parStyle == "Momentary":
+			parameter.pulse(frames=1)
 
 		elif parStyle == "Menu":
 			value = args[0]
@@ -212,13 +216,13 @@ class Oscquery:
 			return par
 
 
-	def GetUpdateMsg(self, container, parameter):
+	def GetUpdateMsg(self, container, parameter, force=False):
 		key = container.name + "." + parameter.name
 		storedItem = parent().fetch(key)
 		par = storedItem["par"]
 		address = storedItem["address"]
 
-		if self.checkLastReceivedValue(storedItem, par):
+		if self.checkLastReceivedValue(storedItem, par) and not force:
 			return False
 
 		typeString = "," + storedItem["type"]
@@ -245,7 +249,7 @@ class Oscquery:
 		if "lastReceivedValue" in storedItem.keys(): 
 			parStyle = parameter.style
 
-			if parStyle in ["XY", "XYZ", "UV", "UVW", "WH", "RGB", "RGBA"]:
+			if parStyle in ["Float", "XY", "XYZ", "UV", "UVW", "WH", "RGB", "RGBA"]:
 				for i, p in enumerate(parameter.tuplet):
 					if p.eval() != storedItem["lastReceivedValue"][i]:
 						return False
@@ -258,12 +262,17 @@ class Oscquery:
 
 
 	def getValue(self, parameter):
+		size = len(parameter.tuplet)
 
-		if (parameter.style in ["XY", "UV", "WH"]):
-			return [parameter.tuplet[0].eval(), parameter.tuplet[1].eval()]
-
-		if (parameter.style in ["XYZ", "UVW"]):
-			return [parameter.tuplet[0].eval(), parameter.tuplet[1].eval(), parameter.tuplet[2].eval()]
+		if (parameter.style in ["Float", "XY", "UV", "WH", "XYZ", "UVW"]):
+			if size == 1:
+				return [parameter.tuplet[0].eval()]
+			elif size == 2:
+				return [parameter.tuplet[0].eval(), parameter.tuplet[1].eval()]
+			elif size == 3:
+				return [parameter.tuplet[0].eval(), parameter.tuplet[1].eval(), parameter.tuplet[2].eval()]
+			elif size == 4: 
+				return [parameter.tuplet[0].eval(), parameter.tuplet[1].eval(), parameter.tuplet[2].eval(), parameter.tuplet[3].eval()]
 
 		if (parameter.style in ["RGB", "RGBA"]):
 			r = self.getHex(parameter.tuplet[0].eval())
@@ -290,12 +299,17 @@ class Oscquery:
 
 
 	def getValueForUpdate(self, parameter):
+		size = len(parameter.tuplet)
 
-		if (parameter.style in ["XY", "UV", "WH"]):
-			return [parameter.tuplet[0].eval(), parameter.tuplet[1].eval()]
-
-		if (parameter.style in ["XYZ", "UVW"]):
-			return [parameter.tuplet[0].eval(), parameter.tuplet[1].eval(), parameter.tuplet[2].eval()]
+		if (parameter.style in ["Float", "XY", "UV", "WH", "XYZ", "UVW"]):
+			if size == 1:
+				return [parameter.tuplet[0].eval()]
+			elif size == 2:
+				return [parameter.tuplet[0].eval(), parameter.tuplet[1].eval()]
+			elif size == 3:
+				return [parameter.tuplet[0].eval(), parameter.tuplet[1].eval(), parameter.tuplet[2].eval()]
+			elif size == 4: 
+				return [parameter.tuplet[0].eval(), parameter.tuplet[1].eval(), parameter.tuplet[2].eval(), parameter.tuplet[3].eval()]
 
 		if (parameter.style in ["RGB", "RGBA"]):
 			r = self.floatToInt(parameter.tuplet[0].eval())
@@ -330,15 +344,16 @@ class Oscquery:
 
 
 	def getRange(self, parameter):
+		size = len(parameter.tuplet)
 
 		if (parameter.style == "Toggle"):
 			return [{ "MAX": 1, "MIN": 0 }]
 
-		if (parameter.style in ["XY", "UV", "WH", "XYZ", "UVW"]):
+		if (parameter.style in ["Float", "XY", "UV", "WH", "XYZ", "UVW"]):
 			result = []
 
-			for charIndex in range(len(parameter.style)):
-				newRange = { "MAX": parameter.tuplet[charIndex].normMax, "MIN": parameter.tuplet[charIndex].normMin }
+			for i in range(size):
+				newRange = { "MAX": parameter.tuplet[i].normMax, "MIN": parameter.tuplet[i].normMin }
 				result.append(newRange)
 
 			return result
@@ -351,11 +366,12 @@ class Oscquery:
 
 	def getType (self, parameter):
 		t = parameter.style
+		size = len(parameter.tuplet)
 
-		if (t == "Float"):
-			return "f"
+		if (t in ["Float", "XY", "UV", "WH", "XYZ", "UVW"]):
+			return "f" * size
 		elif (t == "Int"):
-			return "i"
+			return "i" * size
 		elif (t in ["Str", "File", "Folder", "CHOP", "COMP", "DAT", "SOP", "MAT", "TOP", "Menu", "StrMenu"]):
 			return "s"
 		elif (t == "Toggle"):
@@ -365,11 +381,7 @@ class Oscquery:
 				return "F"
 		elif (t in ["RGB", "RGBA"]):
 			return "r"
-		elif (t in ["XY", "UV", "WH"]):
-			return "ff"
-		elif (t in ["XYZ", "UVW"]):
-			return "fff"
-		elif (t == "Pulse"):
+		elif (t in ["Pulse", "Momentary"]):
 			return "N"
 
 		return "f"
