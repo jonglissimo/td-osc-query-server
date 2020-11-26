@@ -61,6 +61,10 @@ Please file a issue or add a pull request.
 
 ## Changelog
 
+## 1.3.2
+
+* Bugfix: Disabled "Reload .tox on Start", so it's not empty when the component is not found at the tox path.
+
 ## 1.3.1
 
 * Adds Momentary and Float parameter with size greater than 1
