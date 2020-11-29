@@ -17,7 +17,7 @@ class Oscquery:
 		self.ownerComp = ownerComp
 
 	def clearStorage(self):
-		self.ownerComp.unstore("/*")
+		self.ownerComp.unstore("*")
 
 	def GetAllAddresses(self):
 		storage = self.ownerComp.storage
