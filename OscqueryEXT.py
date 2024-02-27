@@ -126,6 +126,7 @@ class Oscquery:
 		
 		result = {
 			"DESCRIPTION": str(self.ownerComp.par.Name), 
+			"FULL_PATH": "/",
 			"CONTENTS": { }
 		}
 
